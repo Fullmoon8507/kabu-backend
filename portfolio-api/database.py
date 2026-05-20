@@ -1,4 +1,5 @@
 import os
+import sys
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 from dotenv import load_dotenv
@@ -8,7 +9,9 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
-    raise ValueError("DATABASE_URL が設定されていません。.env ファイルを確認してください。")
+    # import時ではなく明示的なエラーメッセージをstderrに出してから終了する
+    print("ERROR: DATABASE_URL が設定されていません。Renderの環境変数を確認してください。", file=sys.stderr)
+    sys.exit(1)
 
 # PostgreSQL接続エンジンの作成
 # pool_pre_ping=True: 接続が切れていた場合に自動再接続する

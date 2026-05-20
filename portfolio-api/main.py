@@ -1,3 +1,4 @@
+import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -6,7 +7,12 @@ from database import engine
 from routers import stocks, holdings
 
 # データベース接続時に全テーブルを自動作成する
-models.Base.metadata.create_all(bind=engine)
+try:
+    models.Base.metadata.create_all(bind=engine)
+except Exception as e:
+    print(f"ERROR: データベース接続に失敗しました: {e}", file=sys.stderr)
+    print("DATABASE_URL が正しいか確認してください。", file=sys.stderr)
+    sys.exit(1)
 
 app = FastAPI(
     title="株式ポートフォリオ API",
