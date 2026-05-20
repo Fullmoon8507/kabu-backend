@@ -17,9 +17,15 @@ _JPX_URL = "https://www.jpx.co.jp/markets/statistics-equities/misc/tvdivq0000001
 
 
 @router.get("/", response_model=List[schemas.StockResponse])
-def get_stocks(db: Session = Depends(get_db)):
-    """登録済み銘柄の一覧を返す"""
-    return db.query(models.Stock).all()
+def get_stocks(include_delisted: bool = False, db: Session = Depends(get_db)):
+    """登録済み銘柄の一覧を返す。既定では上場中（is_active）のみ。
+
+    include_delisted=true で上場廃止銘柄も含めた全件を返す。
+    """
+    query = db.query(models.Stock)
+    if not include_delisted:
+        query = query.filter(models.Stock.is_active.is_(True))
+    return query.all()
 
 
 @router.post("/seed")
@@ -94,18 +100,55 @@ def seed_stocks(
             "sector": sector,
         })
 
-    if not stock_list:
-        return {"inserted": 0, "skipped": 0, "total": 0}
+    # 同一 ticker_code が重複すると ON CONFLICT DO UPDATE が失敗するため一意化する
+    # （後勝ち。最新リスト由来なので実害はない）
+    deduped = {s["ticker_code"]: s for s in stock_list}
+    stock_list = list(deduped.values())
+    current_codes = set(deduped.keys())
 
-    stmt = pg_insert(models.Stock).values(stock_list).on_conflict_do_nothing(
-        index_elements=["ticker_code"]
+    if not stock_list:
+        return {"inserted": 0, "updated": 0, "delisted": 0, "total": 0}
+
+    # 取り込み前の既存 ticker_code を取得し、新規/更新の件数を正確に算出する
+    existing_codes = {
+        code
+        for (code,) in db.query(models.Stock.ticker_code).filter(
+            models.Stock.ticker_code.in_(current_codes)
+        )
+    }
+    inserted = len(current_codes - existing_codes)
+    updated = len(current_codes & existing_codes)
+
+    # 既存銘柄は社名・セクターを最新化し、廃止扱いだった銘柄は is_active を復帰させる
+    stmt = pg_insert(models.Stock).values(stock_list)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["ticker_code"],
+        set_={
+            "company_name": stmt.excluded.company_name,
+            "sector": stmt.excluded.sector,
+            "is_active": True,
+        },
     )
-    result = db.execute(stmt)
+    db.execute(stmt)
+
+    # 最新リストに無い銘柄は上場廃止とみなし論理削除する（物理削除しないので holdings の参照は保持）
+    delisted = (
+        db.query(models.Stock)
+        .filter(
+            models.Stock.is_active.is_(True),
+            models.Stock.ticker_code.notin_(current_codes),
+        )
+        .update({"is_active": False}, synchronize_session=False)
+    )
+
     db.commit()
 
-    inserted = result.rowcount if result.rowcount >= 0 else len(stock_list)
-    skipped = len(stock_list) - inserted
-    return {"inserted": inserted, "skipped": skipped, "total": len(stock_list)}
+    return {
+        "inserted": inserted,
+        "updated": updated,
+        "delisted": delisted,
+        "total": len(stock_list),
+    }
 
 
 @router.post("/", response_model=schemas.StockResponse, status_code=201)
