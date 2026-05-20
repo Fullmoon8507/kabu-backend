@@ -76,10 +76,10 @@ def seed_stocks(
         market = str(ws.cell_value(row_idx, idx_market) or "")
         if "内国株式" not in market:
             continue
-        try:
-            code = str(int(float(str(code_val)))).zfill(4)
-        except (ValueError, TypeError):
-            continue
+        code_str = str(code_val).strip()
+        if code_str.endswith(".0"):
+            code_str = code_str[:-2]
+        code = code_str.zfill(4) if code_str.isdigit() else code_str
         company_name = str(ws.cell_value(row_idx, idx_name) or "").strip()
         if not company_name:
             continue
