@@ -1,6 +1,7 @@
 import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import inspect, text
 
 import models
 from database import engine
@@ -9,6 +10,14 @@ from routers import stocks, holdings
 # データベース接続時に全テーブルを自動作成する
 try:
     models.Base.metadata.create_all(bind=engine)
+    # 既存の stocks テーブルに is_active 列が無い場合は追加する（create_all は列追加を行わないため）
+    insp = inspect(engine)
+    cols = [c["name"] for c in insp.get_columns("stocks")]
+    if "is_active" not in cols:
+        with engine.begin() as conn:
+            conn.execute(text(
+                "ALTER TABLE stocks ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE"
+            ))
 except Exception as e:
     print(f"ERROR: データベース接続に失敗しました: {e}", file=sys.stderr)
     print("DATABASE_URL が正しいか確認してください。", file=sys.stderr)
