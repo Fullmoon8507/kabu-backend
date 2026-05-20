@@ -17,15 +17,9 @@ _JPX_URL = "https://www.jpx.co.jp/markets/statistics-equities/misc/tvdivq0000001
 
 
 @router.get("/", response_model=List[schemas.StockResponse])
-def get_stocks(include_delisted: bool = False, db: Session = Depends(get_db)):
-    """登録済み銘柄の一覧を返す。既定では上場中（is_active）のみ。
-
-    include_delisted=true で上場廃止銘柄も含めた全件を返す。
-    """
-    query = db.query(models.Stock)
-    if not include_delisted:
-        query = query.filter(models.Stock.is_active.is_(True))
-    return query.all()
+def get_stocks(db: Session = Depends(get_db)):
+    """登録済みの上場中銘柄（is_active）の一覧を返す"""
+    return db.query(models.Stock).filter(models.Stock.is_active.is_(True)).all()
 
 
 @router.post("/seed")
