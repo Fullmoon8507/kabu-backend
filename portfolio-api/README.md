@@ -36,22 +36,23 @@ cp .env.example .env
 
 Supabaseを使う場合は、Supabaseダッシュボード → Settings → Database → Connection string（URI）をコピーして設定してください。
 
-### 5. データベースをマイグレーション
+### 5. サーバーを起動
 
-スキーマは Alembic で管理しています。サーバー起動前に最新スキーマを適用してください。
+```bash
+uvicorn main:app --reload
+```
+
+スキーマは Alembic で管理しており、**アプリ起動時に自動で `alembic upgrade head` が実行**されます（`main.py`）。手動でマイグレーションを流したい場合は次でも可能です。
 
 ```bash
 alembic upgrade head
 ```
 
-> 既存DB（テーブルが既にある場合）でも、初回マイグレーションは冪等です。
+> 初回マイグレーションは冪等です。既存DB（テーブルが既にある場合）でもエラーにならず、
 > テーブルが無ければ作成し、`stocks` に `is_active` 列が無ければ追加します。
-
-### 6. サーバーを起動
-
-```bash
-uvicorn main:app --reload
-```
+>
+> **DBをリセットしたいとき**は、データテーブルだけでなく `alembic_version` も削除するか、
+> `alembic downgrade base && alembic upgrade head` を実行してください。
 
 ブラウザで <http://localhost:8000/docs> を開くとSwagger UIが表示されます。
 
@@ -92,10 +93,11 @@ uvicorn main:app --reload
 |---|---|
 | **Runtime** | Python 3 |
 | **Build Command** | `pip install -r requirements.txt` |
-| **Start Command** | `alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port $PORT` |
+| **Start Command** | `uvicorn main:app --host 0.0.0.0 --port $PORT` |
 | **Root Directory** | `portfolio-api`（サブディレクトリの場合） |
 
-> Start Command で `alembic upgrade head` を実行し、デプロイのたびに最新スキーマを適用します。
+> マイグレーションはアプリ起動時に自動実行されます（`main.py` で `alembic upgrade head` を呼ぶ）。
+> そのため Start Command は `uvicorn` のみでよく、デプロイのたびに最新スキーマへ揃います。
 > 初回マイグレーションは冪等なので、`is_active` 列が既にある本番DBでもエラーなく完了します。
 
 #### 3. 環境変数を設定
