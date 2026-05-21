@@ -1,26 +1,20 @@
+import os
 import sys
+
+from alembic import command
+from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import inspect, text
 
-import models
-from database import engine
 from routers import stocks, holdings
 
-# データベース接続時に全テーブルを自動作成する
+# 起動時に Alembic マイグレーションを head まで適用する（スキーマ管理は Alembic が担う）。
+# Start Command に依存せず、デプロイ環境でも確実に最新スキーマへ揃える。
 try:
-    models.Base.metadata.create_all(bind=engine)
-    # 既存の stocks テーブルに is_active 列が無い場合は追加する（create_all は列追加を行わないため）
-    insp = inspect(engine)
-    cols = [c["name"] for c in insp.get_columns("stocks")]
-    if "is_active" not in cols:
-        with engine.begin() as conn:
-            conn.execute(text(
-                "ALTER TABLE stocks ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE"
-            ))
+    _alembic_cfg = Config(os.path.join(os.path.dirname(__file__), "alembic.ini"))
+    command.upgrade(_alembic_cfg, "head")
 except Exception as e:
-    print(f"ERROR: データベース接続に失敗しました: {e}", file=sys.stderr)
-    print("DATABASE_URL が正しいか確認してください。", file=sys.stderr)
+    print(f"ERROR: マイグレーションに失敗しました: {e}", file=sys.stderr)
     sys.exit(1)
 
 app = FastAPI(
