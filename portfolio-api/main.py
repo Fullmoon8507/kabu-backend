@@ -1,9 +1,21 @@
+import os
+import sys
+
+from alembic import command
+from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from routers import stocks, holdings
 
-# スキーマ管理は Alembic が担う（デプロイ時に `alembic upgrade head` を実行する）。
+# 起動時に Alembic マイグレーションを head まで適用する（スキーマ管理は Alembic が担う）。
+# Start Command に依存せず、デプロイ環境でも確実に最新スキーマへ揃える。
+try:
+    _alembic_cfg = Config(os.path.join(os.path.dirname(__file__), "alembic.ini"))
+    command.upgrade(_alembic_cfg, "head")
+except Exception as e:
+    print(f"ERROR: マイグレーションに失敗しました: {e}", file=sys.stderr)
+    sys.exit(1)
 
 app = FastAPI(
     title="株式ポートフォリオ API",
