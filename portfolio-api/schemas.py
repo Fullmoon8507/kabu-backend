@@ -21,6 +21,7 @@ class StockCreate(StockBase):
 class StockResponse(StockBase):
     """GET /stocks のレスポンス"""
     id: int
+    is_active: bool
 
     class Config:
         from_attributes = True
