@@ -36,7 +36,18 @@ cp .env.example .env
 
 Supabaseを使う場合は、Supabaseダッシュボード → Settings → Database → Connection string（URI）をコピーして設定してください。
 
-### 5. サーバーを起動
+### 5. データベースをマイグレーション
+
+スキーマは Alembic で管理しています。サーバー起動前に最新スキーマを適用してください。
+
+```bash
+alembic upgrade head
+```
+
+> 既存DB（テーブルが既にある場合）でも、初回マイグレーションは冪等です。
+> テーブルが無ければ作成し、`stocks` に `is_active` 列が無ければ追加します。
+
+### 6. サーバーを起動
 
 ```bash
 uvicorn main:app --reload
@@ -81,8 +92,11 @@ uvicorn main:app --reload
 |---|---|
 | **Runtime** | Python 3 |
 | **Build Command** | `pip install -r requirements.txt` |
-| **Start Command** | `uvicorn main:app --host 0.0.0.0 --port $PORT` |
+| **Start Command** | `alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port $PORT` |
 | **Root Directory** | `portfolio-api`（サブディレクトリの場合） |
+
+> Start Command で `alembic upgrade head` を実行し、デプロイのたびに最新スキーマを適用します。
+> 初回マイグレーションは冪等なので、`is_active` 列が既にある本番DBでもエラーなく完了します。
 
 #### 3. 環境変数を設定
 
