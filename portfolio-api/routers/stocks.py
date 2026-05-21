@@ -89,7 +89,7 @@ def seed_stocks(
             if sector_val:
                 sector = str(sector_val).strip() or None
         stock_list.append({
-            "ticker_code": f"{code}.T",
+            "ticker_code": code,
             "company_name": company_name,
             "sector": sector,
         })
