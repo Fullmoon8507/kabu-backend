@@ -22,6 +22,7 @@ class StockResponse(StockBase):
     """GET /stocks のレスポンス"""
     id: int
     is_active: bool
+    is_manual: bool
 
     class Config:
         from_attributes = True
