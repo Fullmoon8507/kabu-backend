@@ -22,7 +22,6 @@ class StockResponse(StockBase):
     """GET /stocks のレスポンス"""
     id: int
     is_active: bool
-    is_manual: bool
 
     class Config:
         from_attributes = True
@@ -55,8 +54,13 @@ class HoldingUpdate(BaseModel):
 
 
 class HoldingResponse(HoldingBase):
-    """GET /holdings のレスポンス"""
+    """PUT/POST /holdings のレスポンス"""
     id: int
 
     class Config:
         from_attributes = True
+
+
+class HoldingWithCompany(HoldingResponse):
+    """GET /holdings のレスポンス（銘柄名付き）"""
+    company_name: str
