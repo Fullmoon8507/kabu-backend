@@ -9,16 +9,31 @@ from database import get_db
 router = APIRouter(prefix="/holdings", tags=["保有株"])
 
 
-@router.get("/", response_model=List[schemas.HoldingResponse])
+@router.get("/", response_model=List[schemas.HoldingWithCompany])
 def get_holdings(db: Session = Depends(get_db)):
-    """保有株（取引履歴）の一覧を返す"""
-    return db.query(models.Holding).all()
+    """保有株（取引履歴）の一覧を銘柄名付きで返す"""
+    rows = (
+        db.query(models.Holding, models.Stock.company_name)
+        .join(models.Stock, models.Holding.ticker_code == models.Stock.ticker_code)
+        .all()
+    )
+    return [
+        {
+            "id": h.id,
+            "ticker_code": h.ticker_code,
+            "company_name": name,
+            "purchase_date": h.purchase_date,
+            "purchase_price": h.purchase_price,
+            "quantity": h.quantity,
+            "note": h.note,
+        }
+        for h, name in rows
+    ]
 
 
 @router.post("/", response_model=schemas.HoldingResponse, status_code=201)
 def create_holding(holding: schemas.HoldingCreate, db: Session = Depends(get_db)):
     """新しい取引（購入）を登録する。ticker_code が stocks に存在しない場合は 404 を返す"""
-    # 参照先の銘柄が存在するか確認
     stock = db.query(models.Stock).filter(
         models.Stock.ticker_code == holding.ticker_code
     ).first()
@@ -48,7 +63,6 @@ def update_holding(
     if not db_holding:
         raise HTTPException(status_code=404, detail="取引が見つかりません")
 
-    # ticker_code を変更する場合は参照先の存在確認
     if holding_update.ticker_code is not None:
         stock = db.query(models.Stock).filter(
             models.Stock.ticker_code == holding_update.ticker_code
@@ -59,7 +73,6 @@ def update_holding(
                 detail=f"ticker_code '{holding_update.ticker_code}' は銘柄マスタに登録されていません"
             )
 
-    # Noneでない項目だけ更新する（部分更新）
     update_data = holding_update.model_dump(exclude_none=True)
     for key, value in update_data.items():
         setattr(db_holding, key, value)
