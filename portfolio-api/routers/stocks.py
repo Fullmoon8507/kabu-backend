@@ -94,8 +94,6 @@ def seed_stocks(
             "sector": sector,
         })
 
-    # 同一 ticker_code が重複すると ON CONFLICT DO UPDATE が失敗するため一意化する
-    # （後勝ち。最新リスト由来なので実害はない）
     deduped = {s["ticker_code"]: s for s in stock_list}
     stock_list = list(deduped.values())
     current_codes = set(deduped.keys())
@@ -103,7 +101,6 @@ def seed_stocks(
     if not stock_list:
         return {"inserted": 0, "updated": 0, "delisted": 0, "total": 0}
 
-    # 取り込み前の既存 ticker_code を取得し、新規/更新の件数を正確に算出する
     existing_codes = {
         code
         for (code,) in db.query(models.Stock.ticker_code).filter(
@@ -113,7 +110,6 @@ def seed_stocks(
     inserted = len(current_codes - existing_codes)
     updated = len(current_codes & existing_codes)
 
-    # 既存銘柄は社名・セクターを最新化し、廃止扱いだった銘柄は is_active を復帰させる
     stmt = pg_insert(models.Stock).values(stock_list)
     stmt = stmt.on_conflict_do_update(
         index_elements=["ticker_code"],
@@ -125,11 +121,12 @@ def seed_stocks(
     )
     db.execute(stmt)
 
-    # 最新リストに無い銘柄は上場廃止とみなし論理削除する（物理削除しないので holdings の参照は保持）
+    # is_manual=False（シード由来）の銘柄のみ上場廃止処理する。手動登録銘柄は除外する。
     delisted = (
         db.query(models.Stock)
         .filter(
             models.Stock.is_active.is_(True),
+            models.Stock.is_manual.is_(False),
             models.Stock.ticker_code.notin_(current_codes),
         )
         .update({"is_active": False}, synchronize_session=False)
@@ -147,14 +144,14 @@ def seed_stocks(
 
 @router.post("/", response_model=schemas.StockResponse, status_code=201)
 def create_stock(stock: schemas.StockCreate, db: Session = Depends(get_db)):
-    """新しい銘柄を登録する。ticker_code が重複する場合は 409 を返す"""
+    """新しい銘柄を手動登録する。ticker_code が重複する場合は 409 を返す"""
     existing = db.query(models.Stock).filter(
         models.Stock.ticker_code == stock.ticker_code
     ).first()
     if existing:
         raise HTTPException(status_code=409, detail="この ticker_code は既に登録されています")
 
-    db_stock = models.Stock(**stock.model_dump())
+    db_stock = models.Stock(**stock.model_dump(), is_manual=True)
     db.add(db_stock)
     db.commit()
     db.refresh(db_stock)
