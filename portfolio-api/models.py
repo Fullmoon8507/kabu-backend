@@ -22,7 +22,7 @@ class Holding(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     ticker_code = Column(String, ForeignKey("stocks.ticker_code"), nullable=False)
-    purchase_date = Column(Date, nullable=False)
+    purchase_date = Column(Date, nullable=True)
     purchase_price = Column(Float, nullable=False)
     quantity = Column(Integer, nullable=False)
     note = Column(Text, nullable=True)

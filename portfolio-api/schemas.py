@@ -33,7 +33,7 @@ class StockResponse(StockBase):
 
 class HoldingBase(BaseModel):
     ticker_code: str
-    purchase_date: date
+    purchase_date: Optional[date] = None
     purchase_price: float
     quantity: int
     note: Optional[str] = None
