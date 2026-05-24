@@ -1,14 +1,14 @@
-import os
 from typing import List, Optional
 
 import requests as req
 import xlrd
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 import models
 import schemas
+from auth import get_current_user
 from database import get_db
 
 router = APIRouter(prefix="/stocks", tags=["銘柄マスタ"])
@@ -17,21 +17,20 @@ _JPX_URL = "https://www.jpx.co.jp/markets/statistics-equities/misc/tvdivq0000001
 
 
 @router.get("/", response_model=List[schemas.StockResponse])
-def get_stocks(db: Session = Depends(get_db)):
+def get_stocks(
+    db: Session = Depends(get_db),
+    _: str = Depends(get_current_user),
+):
     """登録済みの上場中銘柄（is_active）の一覧を返す"""
     return db.query(models.Stock).filter(models.Stock.is_active.is_(True)).all()
 
 
 @router.post("/seed")
 def seed_stocks(
-    x_admin_token: Optional[str] = Header(None),
     db: Session = Depends(get_db),
+    _: str = Depends(get_current_user),
 ):
     """東証上場銘柄を JPX から取得して stocks テーブルに一括登録する"""
-    seed_token = os.getenv("SEED_TOKEN")
-    if seed_token and x_admin_token != seed_token:
-        raise HTTPException(status_code=403, detail="Unauthorized")
-
     try:
         response = req.get(_JPX_URL, timeout=30)
         response.raise_for_status()
@@ -143,7 +142,11 @@ def seed_stocks(
 
 
 @router.post("/", response_model=schemas.StockResponse, status_code=201)
-def create_stock(stock: schemas.StockCreate, db: Session = Depends(get_db)):
+def create_stock(
+    stock: schemas.StockCreate,
+    db: Session = Depends(get_db),
+    _: str = Depends(get_current_user),
+):
     """新しい銘柄を手動登録する。ticker_code が重複する場合は 409 を返す"""
     existing = db.query(models.Stock).filter(
         models.Stock.ticker_code == stock.ticker_code
@@ -159,7 +162,11 @@ def create_stock(stock: schemas.StockCreate, db: Session = Depends(get_db)):
 
 
 @router.delete("/{ticker_code}", status_code=204)
-def delete_stock(ticker_code: str, db: Session = Depends(get_db)):
+def delete_stock(
+    ticker_code: str,
+    db: Session = Depends(get_db),
+    _: str = Depends(get_current_user),
+):
     """指定した ticker_code の銘柄を削除する。存在しない場合は 404 を返す"""
     db_stock = db.query(models.Stock).filter(
         models.Stock.ticker_code == ticker_code

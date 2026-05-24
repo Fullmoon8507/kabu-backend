@@ -4,13 +4,17 @@ from typing import List
 
 import models
 import schemas
+from auth import get_current_user
 from database import get_db
 
 router = APIRouter(prefix="/holdings", tags=["保有株"])
 
 
 @router.get("/", response_model=List[schemas.HoldingWithCompany])
-def get_holdings(db: Session = Depends(get_db)):
+def get_holdings(
+    db: Session = Depends(get_db),
+    _: str = Depends(get_current_user),
+):
     """保有株（取引履歴）の一覧を銘柄名付きで返す"""
     rows = (
         db.query(models.Holding, models.Stock.company_name)
@@ -32,7 +36,11 @@ def get_holdings(db: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=schemas.HoldingResponse, status_code=201)
-def create_holding(holding: schemas.HoldingCreate, db: Session = Depends(get_db)):
+def create_holding(
+    holding: schemas.HoldingCreate,
+    db: Session = Depends(get_db),
+    _: str = Depends(get_current_user),
+):
     """新しい取引（購入）を登録する。ticker_code が stocks に存在しない場合は 404 を返す"""
     stock = db.query(models.Stock).filter(
         models.Stock.ticker_code == holding.ticker_code
@@ -55,6 +63,7 @@ def update_holding(
     holding_id: int,
     holding_update: schemas.HoldingUpdate,
     db: Session = Depends(get_db),
+    _: str = Depends(get_current_user),
 ):
     """指定 ID の取引を修正する。存在しない場合は 404 を返す"""
     db_holding = db.query(models.Holding).filter(
@@ -83,7 +92,11 @@ def update_holding(
 
 
 @router.delete("/{holding_id}", status_code=204)
-def delete_holding(holding_id: int, db: Session = Depends(get_db)):
+def delete_holding(
+    holding_id: int,
+    db: Session = Depends(get_db),
+    _: str = Depends(get_current_user),
+):
     """指定 ID の取引を削除する。存在しない場合は 404 を返す"""
     db_holding = db.query(models.Holding).filter(
         models.Holding.id == holding_id

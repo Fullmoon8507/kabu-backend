@@ -6,6 +6,7 @@ from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+import auth
 from routers import stocks, holdings
 
 # 起動時に Alembic マイグレーションを head まで適用する（スキーマ管理は Alembic が担う）。
@@ -23,16 +24,18 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# CORS設定: 全オリジン・全メソッド・全ヘッダーを許可する
+_raw_origins = os.getenv("FRONTEND_ORIGINS", "http://localhost:4200")
+_allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ルーターの登録
+app.include_router(auth.router)
 app.include_router(stocks.router)
 app.include_router(holdings.router)
 
