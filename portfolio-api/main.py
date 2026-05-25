@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import auth
-from routers import stocks, holdings
+from routers import stocks, holdings, backtest
 
 # 起動時に Alembic マイグレーションを head まで適用する（スキーマ管理は Alembic が担う）。
 # Start Command に依存せず、デプロイ環境でも確実に最新スキーマへ揃える。
@@ -35,6 +35,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(stocks.router)
 app.include_router(holdings.router)
+app.include_router(backtest.router)
 
 
 @app.get("/", tags=["ヘルスチェック"])
