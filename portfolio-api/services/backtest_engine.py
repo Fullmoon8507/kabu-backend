@@ -2,6 +2,14 @@ import pandas as pd
 import yfinance as yf
 
 
+def _normalize_ticker(ticker: str) -> str:
+    """4桁の数字のみの場合、日本株として .T を自動補完する"""
+    t = ticker.strip()
+    if t.isdigit() and len(t) == 4:
+        return f"{t}.T"
+    return t
+
+
 def run_ma_backtest(
     ticker: str,
     start_date: str,
@@ -9,6 +17,7 @@ def run_ma_backtest(
     short_ma: int,
     long_ma: int,
 ) -> dict:
+    ticker = _normalize_ticker(ticker)
     df = yf.download(ticker, start=start_date, end=end_date, auto_adjust=True, progress=False)
 
     if df.empty:
