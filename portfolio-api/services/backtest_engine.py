@@ -1,13 +1,46 @@
+import os
 import pandas as pd
-import yfinance as yf
+import requests
+
+JQUANTS_BASE = "https://api.jquants.com/v1"
 
 
-def _normalize_ticker(ticker: str) -> str:
-    """4桁の数字のみの場合、日本株として .T を自動補完する"""
+def _get_id_token() -> str:
+    refresh_token = os.environ.get("JQUANTS_REFRESH_TOKEN", "")
+    if not refresh_token:
+        raise ValueError("JQUANTS_REFRESH_TOKEN が環境変数に設定されていません。")
+    res = requests.post(
+        f"{JQUANTS_BASE}/token/auth_refresh",
+        params={"refreshtoken": refresh_token},
+        timeout=10,
+    )
+    res.raise_for_status()
+    return res.json()["idToken"]
+
+
+def _normalize_code(ticker: str) -> str:
+    """8267.T や 2928.S → 8267 / 2928 に正規化（4桁コードのみ抽出）"""
     t = ticker.strip()
-    if t.isdigit() and len(t) == 4:
-        return f"{t}.T"
+    if "." in t:
+        t = t.split(".")[0]
     return t
+
+
+def _fetch_prices(code: str, start_date: str, end_date: str, id_token: str) -> pd.DataFrame:
+    res = requests.get(
+        f"{JQUANTS_BASE}/prices/daily_quotes",
+        params={"code": code, "dateFrom": start_date, "dateTo": end_date},
+        headers={"Authorization": f"Bearer {id_token}"},
+        timeout=15,
+    )
+    res.raise_for_status()
+    data = res.json().get("daily_quotes", [])
+    if not data:
+        return pd.DataFrame()
+    df = pd.DataFrame(data)
+    df["Date"] = pd.to_datetime(df["Date"])
+    df = df.set_index("Date").sort_index()
+    return df[["Close"]]
 
 
 def run_ma_backtest(
@@ -17,17 +50,13 @@ def run_ma_backtest(
     short_ma: int,
     long_ma: int,
 ) -> dict:
-    ticker = _normalize_ticker(ticker)
-    df = yf.download(ticker, start=start_date, end=end_date, auto_adjust=True, progress=False)
+    code = _normalize_code(ticker)
+    id_token = _get_id_token()
+    df = _fetch_prices(code, start_date, end_date, id_token)
 
     if df.empty:
-        raise ValueError(f"'{ticker}' のデータが取得できませんでした。ティッカーや期間を確認してください。")
+        raise ValueError(f"'{ticker}' のデータが取得できませんでした。銘柄コードや期間を確認してください。")
 
-    # yfinance が MultiIndex で返す場合に平坦化
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-
-    df = df[["Close"]].copy()
     df["short_ma"] = df["Close"].rolling(short_ma).mean()
     df["long_ma"] = df["Close"].rolling(long_ma).mean()
     df = df.dropna()
@@ -50,13 +79,11 @@ def run_ma_backtest(
         curr_long = float(row["long_ma"])
         price = float(row["Close"])
 
-        # ゴールデンクロス: 未保有時に買い
         if prev_short <= prev_long and curr_short > curr_long and shares == 0:
             shares = int(cash / price)
             if shares > 0:
                 cash -= shares * price
 
-        # デッドクロス: 保有中に売り
         elif prev_short >= prev_long and curr_short < curr_long and shares > 0:
             cash += shares * price
             shares = 0
