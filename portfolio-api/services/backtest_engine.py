@@ -1,5 +1,15 @@
+import requests
 import pandas as pd
 import yfinance as yf
+
+_YF_SESSION = requests.Session()
+_YF_SESSION.headers.update({
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    )
+})
 
 
 def _normalize_ticker(ticker: str) -> str:
@@ -18,7 +28,7 @@ def run_ma_backtest(
     long_ma: int,
 ) -> dict:
     ticker = _normalize_ticker(ticker)
-    df = yf.download(ticker, start=start_date, end=end_date, auto_adjust=True, progress=False)
+    df = yf.download(ticker, start=start_date, end=end_date, auto_adjust=True, progress=False, session=_YF_SESSION)
 
     if df.empty:
         raise ValueError(f"'{ticker}' のデータが取得できませんでした。ティッカーや期間を確認してください。")
