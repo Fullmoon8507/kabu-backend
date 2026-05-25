@@ -28,19 +28,29 @@ def run_ma_backtest(
     long_ma: int,
 ) -> dict:
     ticker = _normalize_ticker(ticker)
-    df = yf.download(ticker, start=start_date, end=end_date, auto_adjust=True, progress=False, session=_YF_SESSION)
+    df_full = yf.download(
+        ticker, start=start_date, end=end_date,
+        auto_adjust=True, progress=False, session=_YF_SESSION,
+    )
 
-    if df.empty:
+    if df_full.empty:
         raise ValueError(f"'{ticker}' のデータが取得できませんでした。ティッカーや期間を確認してください。")
 
-    # yfinance が MultiIndex で返す場合に平坦化
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
+    if isinstance(df_full.columns, pd.MultiIndex):
+        df_full.columns = df_full.columns.get_level_values(0)
 
-    df = df[["Close"]].copy()
-    df["short_ma"] = df["Close"].rolling(short_ma).mean()
-    df["long_ma"] = df["Close"].rolling(long_ma).mean()
-    df = df.dropna()
+    df_full = df_full[["Close"]].copy()
+    df_full["short_ma"] = df_full["Close"].rolling(short_ma).mean()
+    df_full["long_ma"] = df_full["Close"].rolling(long_ma).mean()
+
+    # チャート用データ（全期間・NaN は None に変換）
+    chart_dates = [d.strftime("%Y-%m-%d") for d in df_full.index]
+    chart_prices = [round(float(v), 2) for v in df_full["Close"]]
+    chart_short_ma = [None if pd.isna(v) else round(float(v), 2) for v in df_full["short_ma"]]
+    chart_long_ma = [None if pd.isna(v) else round(float(v), 2) for v in df_full["long_ma"]]
+
+    # シミュレーションは NaN 除去後のデータで実行
+    df = df_full.dropna()
 
     if df.empty:
         raise ValueError(
@@ -51,11 +61,12 @@ def run_ma_backtest(
     cash = float(initial_cash)
     shares = 0
     trade_count = 0
+    trades: list[dict] = []
 
     prev_short = df["short_ma"].iloc[0]
     prev_long = df["long_ma"].iloc[0]
 
-    for _, row in df.iloc[1:].iterrows():
+    for date, row in df.iloc[1:].iterrows():
         curr_short = float(row["short_ma"])
         curr_long = float(row["long_ma"])
         price = float(row["Close"])
@@ -65,12 +76,14 @@ def run_ma_backtest(
             shares = int(cash / price)
             if shares > 0:
                 cash -= shares * price
+                trades.append({"date": date.strftime("%Y-%m-%d"), "type": "buy", "price": price})
 
         # デッドクロス: 保有中に売り
         elif prev_short >= prev_long and curr_short < curr_long and shares > 0:
             cash += shares * price
             shares = 0
             trade_count += 1
+            trades.append({"date": date.strftime("%Y-%m-%d"), "type": "sell", "price": price})
 
         prev_short = curr_short
         prev_long = curr_long
@@ -81,4 +94,11 @@ def run_ma_backtest(
     return {
         "total_return_pct": round(total_return_pct, 2),
         "trade_count": trade_count,
+        "chart": {
+            "dates": chart_dates,
+            "prices": chart_prices,
+            "short_ma": chart_short_ma,
+            "long_ma": chart_long_ma,
+            "trades": trades,
+        },
     }

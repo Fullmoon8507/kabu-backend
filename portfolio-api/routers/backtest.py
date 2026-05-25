@@ -15,9 +15,24 @@ class BacktestRequest(BaseModel):
     long_ma: int = 75
 
 
+class TradePoint(BaseModel):
+    date: str
+    type: str
+    price: float
+
+
+class ChartData(BaseModel):
+    dates: list[str]
+    prices: list[float]
+    short_ma: list[float | None]
+    long_ma: list[float | None]
+    trades: list[TradePoint]
+
+
 class BacktestResponse(BaseModel):
     total_return_pct: float
     trade_count: int
+    chart: ChartData
 
 
 @router.post("/run", response_model=BacktestResponse)
